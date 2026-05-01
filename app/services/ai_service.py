@@ -23,13 +23,14 @@ def build_ai_prompt(request: GenerateAIRequest) -> str:
 
 
 def call_openrouter(prompt: str) -> str:
-    if not constants.OPENROUTER_API_KEY:
+    api_key = constants.get_openrouter_api_key()
+    if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is missing")
 
     response = requests.post(
         constants.OPENROUTER_URL,
         headers={
-            "Authorization": f"Bearer {constants.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": constants.OPENROUTER_REFERER,
             "X-Title": constants.OPENROUTER_APP_TITLE,
@@ -62,7 +63,8 @@ def call_openrouter(prompt: str) -> str:
 
 
 def transcribe_image(image_bytes: bytes, content_type: str) -> str:
-    if not constants.OPENROUTER_API_KEY:
+    api_key = constants.get_openrouter_api_key()
+    if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is missing")
 
     base64_image = base64.b64encode(image_bytes).decode("utf-8")
@@ -71,7 +73,7 @@ def transcribe_image(image_bytes: bytes, content_type: str) -> str:
     response = requests.post(
         constants.OPENROUTER_URL,
         headers={
-            "Authorization": f"Bearer {constants.OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": constants.OPENROUTER_REFERER,
             "X-Title": constants.OPENROUTER_APP_TITLE,
