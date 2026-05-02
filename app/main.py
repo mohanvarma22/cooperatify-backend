@@ -32,6 +32,11 @@ def health_check():
     return {"status": "ok"}
 
 
+@app.get(f"{API_PREFIX}/ping")
+def ping():
+    return {"message": "pong"}
+
+
 @app.get(f"{API_PREFIX}/config")
 def get_config():
     return {
