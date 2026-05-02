@@ -17,7 +17,7 @@ env:
   EC2_TAG_VALUE: ${{ vars.EC2_TAG_VALUE }}
   CONTAINER_NAME: cooperatify-backend
   APP_PORT: "8000"
-  OPENROUTER_API_KEY_SECRET_NAME: OPENROUTER_API_KEY
+  BEDROCK_MODEL: ${{ vars.BEDROCK_MODEL || 'amazon.nova-lite-v1:0' }}
 
 jobs:
   deploy:
@@ -81,7 +81,7 @@ jobs:
               "docker pull ${IMAGE_URI}:latest",
               "docker stop ${CONTAINER_NAME} || true",
               "docker rm ${CONTAINER_NAME} || true",
-              "docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} -e AWS_REGION=${AWS_REGION} -e OPENROUTER_API_KEY_SECRET_NAME=${OPENROUTER_API_KEY_SECRET_NAME} ${IMAGE_URI}:latest",
+              "docker run -d --name ${CONTAINER_NAME} --restart unless-stopped -p ${APP_PORT}:${APP_PORT} -e AWS_REGION=${AWS_REGION} -e BEDROCK_MODEL=${BEDROCK_MODEL} ${IMAGE_URI}:latest",
               "docker image prune -f"
             ]
           }

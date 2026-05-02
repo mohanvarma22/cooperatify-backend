@@ -1,10 +1,15 @@
-import base64
-from typing import Any
-
-import requests
+import boto3
 
 from app import constants
 from app.models import GenerateAIRequest
+
+
+BEDROCK_IMAGE_FORMATS = {
+    "image/gif": "gif",
+    "image/jpeg": "jpeg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 
 
 def build_ai_prompt(request: GenerateAIRequest) -> str:
@@ -22,94 +27,73 @@ def build_ai_prompt(request: GenerateAIRequest) -> str:
     )
 
 
-def call_openrouter(prompt: str) -> str:
-    api_key = constants.get_openrouter_api_key()
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is missing")
+def _bedrock_client():
+    return boto3.client("bedrock-runtime", region_name=constants.AWS_REGION)
 
-    response = requests.post(
-        constants.OPENROUTER_URL,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": constants.OPENROUTER_REFERER,
-            "X-Title": constants.OPENROUTER_APP_TITLE,
-        },
-        json={
-            "model": constants.OPENROUTER_MODEL,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an assistant that improves workplace messages. "
-                        "Be concise, natural, and context-aware."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
+
+def _extract_bedrock_text(response: dict) -> str:
+    content = response["output"]["message"]["content"]
+    return "".join(block.get("text", "") for block in content).strip()
+
+
+def call_bedrock(prompt: str) -> str:
+    response = _bedrock_client().converse(
+        modelId=constants.BEDROCK_MODEL,
+        system=[
+            {
+                "text": (
+                    "You are an assistant that improves workplace messages. "
+                    "Be concise, natural, and context-aware."
+                )
+            }
+        ],
+        messages=[
+            {
+                "role": "user",
+                "content": [{"text": prompt}],
+            }
+        ],
+        inferenceConfig={
+            "maxTokens": 300,
             "temperature": 0.4,
-            "max_tokens": 300,
         },
-        timeout=constants.AI_TIMEOUT_SECONDS,
     )
 
-    if response.status_code == 429:
-        raise PermissionError("RATE_LIMIT")
-
-    response.raise_for_status()
-    data: dict[str, Any] = response.json()
-
-    return data["choices"][0]["message"]["content"].strip()
+    return _extract_bedrock_text(response)
 
 
 def transcribe_image(image_bytes: bytes, content_type: str) -> str:
-    api_key = constants.get_openrouter_api_key()
-    if not api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is missing")
+    image_format = BEDROCK_IMAGE_FORMATS.get(content_type)
+    if not image_format:
+        raise ValueError("Unsupported image type")
 
-    base64_image = base64.b64encode(image_bytes).decode("utf-8")
-    image_url = f"data:{content_type};base64,{base64_image}"
-
-    response = requests.post(
-        constants.OPENROUTER_URL,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": constants.OPENROUTER_REFERER,
-            "X-Title": constants.OPENROUTER_APP_TITLE,
-        },
-        json={
-            "model": constants.OPENROUTER_MODEL,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": (
-                                "Extract all readable text from this image. "
-                                "Return only the transcript."
-                            ),
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": image_url,
+    response = _bedrock_client().converse(
+        modelId=constants.BEDROCK_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "text": (
+                            "Extract all readable text from this image. "
+                            "Return only the transcript."
+                        )
+                    },
+                    {
+                        "image": {
+                            "format": image_format,
+                            "source": {
+                                "bytes": image_bytes,
                             },
                         },
-                    ],
-                },
-            ],
+                    },
+                ],
+            }
+        ],
+        inferenceConfig={
+            "maxTokens": 1000,
             "temperature": 0,
-            "max_tokens": 1000,
         },
-        timeout=constants.AI_TIMEOUT_SECONDS,
     )
 
-    if response.status_code == 429:
-        raise PermissionError("RATE_LIMIT")
-
-    response.raise_for_status()
-    data: dict[str, Any] = response.json()
-
-    return data["choices"][0]["message"]["content"].strip()
+    return _extract_bedrock_text(response)

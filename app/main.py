@@ -1,6 +1,6 @@
 import time
 
-import requests
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 
@@ -8,15 +8,15 @@ from app.constants import (
     ALLOWED_IMAGE_TYPES,
     API_PREFIX,
     APP_TITLE,
+    BEDROCK_MODEL,
     MAX_IMAGE_SIZE_BYTES,
     MODES,
-    OPENROUTER_MODEL,
     PLATFORMS,
     TONES,
     error_response,
 )
 from app.models import GenerateAIRequest
-from app.services.ai_service import build_ai_prompt, call_openrouter, transcribe_image
+from app.services.ai_service import build_ai_prompt, call_bedrock, transcribe_image
 
 
 app = FastAPI(title=APP_TITLE)
@@ -54,13 +54,10 @@ def generate_ai_response(request: GenerateAIRequest):
         return error_response(400, "INVALID_INPUT", "Input text is required")
 
     try:
-        output = call_openrouter(build_ai_prompt(request))
-    except requests.exceptions.Timeout:
-        return error_response(504, "AI_TIMEOUT", "AI request timed out")
-    except PermissionError:
-        return error_response(429, "RATE_LIMIT", "Rate limit exceeded")
+        output = call_bedrock(build_ai_prompt(request))
     except (
-        requests.exceptions.RequestException,
+        BotoCoreError,
+        ClientError,
         KeyError,
         IndexError,
         RuntimeError,
@@ -80,7 +77,7 @@ def generate_ai_response(request: GenerateAIRequest):
         },
         "meta": {
             "processingTimeMs": processing_time_ms,
-            "model": OPENROUTER_MODEL,
+            "model": BEDROCK_MODEL,
         },
     }
 
@@ -101,12 +98,9 @@ def transcribe_uploaded_image(file: UploadFile = File(...)):
 
     try:
         transcript = transcribe_image(image_bytes, file.content_type)
-    except requests.exceptions.Timeout:
-        return error_response(504, "AI_TIMEOUT", "AI request timed out")
-    except PermissionError:
-        return error_response(429, "RATE_LIMIT", "Rate limit exceeded")
     except (
-        requests.exceptions.RequestException,
+        BotoCoreError,
+        ClientError,
         KeyError,
         IndexError,
         RuntimeError,
@@ -123,6 +117,6 @@ def transcribe_uploaded_image(file: UploadFile = File(...)):
         },
         "meta": {
             "processingTimeMs": processing_time_ms,
-            "model": OPENROUTER_MODEL,
+            "model": BEDROCK_MODEL,
         },
     }
